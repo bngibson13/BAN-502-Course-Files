@@ -1,0 +1,63 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Missing Data
+## Blaine Gibson
+
+```{r}
+library(tidyverse)
+library(VIM)
+library(mice)
+library(skimr)
+
+grades <- read_csv("class-grades.csv")
+str(grades)
+summary(grades)
+skim(grades)
+```
+Tutorial, Midterm, Take Home and Final columns are all missing data.
+
+```{r}
+vim_plot = aggr(grades, numbers = TRUE, prop = c(TRUE, FALSE),cex.axis=.7)
+
+```
+
+There are 10 students missing at least 1 peice of data including 1 student who is missing both the take home and midterm.  
+
+Row-wise deletion:
+```{r}
+grades_rowdel = grades %>% drop_na()
+str(grades_rowdel)
+summary(grades_rowdel)
+skim(grades_rowdel)
+```
+
+89 observation rows remain after row-wise deletion is applied.  
+
+Column-wise deletion:
+```{r}
+grades_coldel = grades %>%  select(-Tutorial,-Midterm,-TakeHome,-Final)
+vim_plot2 = aggr(grades_coldel, numbers = TRUE, prop = c(TRUE, FALSE),cex.axis=.7)
+str(grades_coldel)
+summary(grades_coldel)
+skim(grades_coldel)
+```
+99 observations remain but with only 2 columns.  
+
+In this instance, row-wise deletion seems to be the more logical option as it does not remove 4 variables from the data as column-wise deletion does. Column-wise deletion leaves very little of the data remaining to be analyzed.  
+```{r}
+set.seed(123)
+
+imp_grades = mice(grades, m=5, method='pmm', printFlag=FALSE)
+
+summary(imp_grades)
+
+```
+
+```{r}
+grades_complete = complete(imp_grades)
+summary(grades_complete)
+```
+The mean of the final variable has increased to 68.33 from 68.23, a rather minor change.

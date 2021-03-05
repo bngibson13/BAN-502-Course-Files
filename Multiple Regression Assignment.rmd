@@ -1,0 +1,155 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Multiple Regression Assignment
+## Blaine Gibson
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(glmnet)
+library(GGally)
+library(ggcorrplot)
+library(MASS)
+library(car)
+library(lubridate)
+library(lmtest)
+library(readr)
+```
+
+```{r}
+bike <- read_csv("bike_cleaned.csv")
+bike = bike%>% 
+  mutate(dteday =mdy(dteday)) %>%
+  mutate(mnth =as_factor(mnth)) %>%
+  mutate(season = as_factor(season)) %>%
+  mutate(holiday = as_factor(holiday)) %>%
+  mutate(weekday = as_factor(weekday)) %>%
+  mutate(workingday = as_factor(workingday)) %>%
+  mutate(weathersit = as_factor(weathersit)) %>%
+  mutate(hr = as_factor(hr))
+```
+
+**Why do we convert the “hr” variable into factor? Why not just leave as numbers?**  
+We convert this variable into a factor because it is the hours of the day, therefore it is a categorical variable.
+
+
+**Which of the quantitative variables appears to be best correlated with “count” (ignore the “registered”and “casual” variable as the sum of these two variables equals “count”)?**
+Hours seems to have the highest correlation to count as the amount of count decreases for certain times.
+
+```{r}
+ggcorr(bike)
+
+ggplot(bike,aes(x=hr,y=count))+ 
+  geom_boxplot()+ 
+  geom_jitter(alpha=0.15)
+  theme_bw()
+ggplot(bike,aes(x=mnth,y=count))+ 
+  geom_boxplot()+ 
+  theme_bw()
+ggplot(bike,aes(x=season,y=count))+ 
+  geom_boxplot()+ 
+  theme_bw()
+ggplot(bike,aes(x=holiday,y=count))+ 
+  geom_boxplot()+ 
+  theme_bw()
+ggplot(bike,aes(x=weekday,y=count))+ 
+  geom_boxplot()+ 
+  theme_bw()
+ggplot(bike,aes(x=workingday,y=count))+ 
+  geom_boxplot()+ 
+  theme_bw()
+ggplot(bike,aes(x=weathersit,y=count))+ 
+  geom_boxplot()+ 
+  theme_bw()
+```
+
+**Which variables appear to affect“count”? Provide a brief explanation as to why you believe that each variable does or does not affect “count”.**
+
+* mnth-Month seems to slightly affect the count during the middle of the year, you see the medians increase.  
+* season-Season does not seem to affect the count though there is a slight increase of count in the spring and summer.  
+* holiday-Holiday seems to have a minimal affect on count as the boxes and medians are around the same but the outliers for the non-holiday plot do extend further.  
+* weekday-There appears to be no effect on count for weekday as each column is nearly identical.  
+* workingday- Working day has a slight affect on the median but overall the count is nearly the same.  
+* weathersit- Weather situation has a fairly obvious change as the higher percipitation, the lower the count.  
+
+```{r}
+bike_recipe = recipe(count ~ hr,bike)
+bikelm_model = 
+  linear_reg() %>%
+  set_engine("lm")
+bikelm_workflow =
+  workflow()%>%
+  add_model(bikelm_model)%>%
+  add_recipe(bike_recipe)
+bikelm_fit=fit(bikelm_workflow,bike)
+summary(bikelm_fit$fit$fit$fit)
+ggplot(bike,aes(x=hr, y=count))+
+  geom_point()+
+  geom_smooth(
+    method=lm,
+    se=FALSE)
+```
+The model above has very significant p values that are very close to zero and an r squared that isn't huge but would need to be compared to other variables to determine its effectiveness.  
+
+```{r}
+bike2_recipe = recipe(count ~ season + hr + mnth + holiday + weekday + workingday + weathersit + temp + atemp + hum + windspeed, bike) %>%
+  step_dummy(all_nominal()) %>% 
+  step_center(all_predictors()) %>% 
+  step_scale(all_predictors()) 
+  
+  
+bike2_model = 
+  linear_reg(mixture = 0 ) %>% 
+  set_engine("glmnet") 
+
+bike2_wflow = 
+  workflow() %>% 
+  add_model(bike2_model) %>% 
+  add_recipe(bike2_recipe)
+
+ridge_fit = fit(bike2_wflow, bike)
+
+plot(ridge_fit$fit$fit$fit$lambda,ridge_fit$fit$fit$fit$dev.ratio)
+
+ridge_fit %>%
+  pull_workflow_fit() %>%
+  pluck("fit")  
+
+ridge_fit %>%
+  pull_workflow_fit() %>%
+  pluck("fit")  %>% 
+  coef(s = 30) 
+```
+
+```{r}
+bike2_recipe = recipe(count ~ season + hr + mnth + holiday + weekday + workingday + weathersit + temp + atemp + hum + windspeed, bike) %>%
+  step_dummy(all_nominal()) %>% 
+  step_center(all_predictors()) %>% 
+  step_scale(all_predictors()) 
+  
+lasso_model = 
+  linear_reg(mixture = 1) %>% 
+  set_engine("glmnet") 
+
+lasso_wflow = 
+  workflow() %>% 
+  add_model(lasso_model) %>% 
+  add_recipe(bike2_recipe)
+
+lasso_fit = fit(lasso_wflow, bike)
+
+lasso_fit %>%
+  pull_workflow_fit() %>%
+  pluck("fit")  
+
+lasso_fit %>%
+  pull_workflow_fit() %>%
+  pluck("fit")  %>% 
+  coef(s = 0.582)
+```
+
+**What are the implications of the model results from the ridge and lasso methods?**  
+The implications of these two methods can help find a r squared value that would be further acceptable in multiple regressions and since multiple regression is much harder to apply to a chart, these two models help to choose appropriate factors for lambda to keep the predictions more accurate. Lasso by removing unnecessary variables, and ridge by lowering beta to as close to zero. Each of these removes potential errors involved in adding additional variables in a multiple regression and ridge lowers the effect multicollinarity. 

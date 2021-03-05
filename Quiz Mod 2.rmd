@@ -1,0 +1,57 @@
+#Quiz Answers
+##Blaine Gibson
+
+Format to find answers for quiz 2.
+```{r}
+library(tidyverse)
+library(GGally)
+library(lmtest)
+```
+```{r}
+air = airquality
+```
+153 observations with 6 variables
+```{r}
+air2 = drop_na(air)
+ggpairs(air2)
+
+```
+```{r}
+ggplot(air2, aes(x=Temp,y=Ozone))+
+  geom_point() +
+  geom_smooth(method= "lm", se = FALSE)
+```
+```{r}
+ggcorr(air2,label = TRUE)
+```
+
+```{r}
+library(tidymodels)
+aircorr = recipe(Ozone ~ Temp, air2)
+lm_air=
+  linear_reg() %>%
+  set_engine("lm")
+```
+
+```{r}
+lmAir_wflow =
+  workflow() %>%
+  add_model(lm_air)%>%
+  add_recipe(aircorr)
+```
+
+```{r}
+lm_fit =fit(lmAir_wflow, air2)
+```
+
+```{r}
+summary(lm_fit$fit$fit$fit)
+```
+
+```{r}
+confint(lm_fit$fit$fit$fit)
+```
+```{r}
+dwtest(lm_fit$fit$fit$fit)
+```
+

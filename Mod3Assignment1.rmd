@@ -1,0 +1,70 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Model Validation
+## Blaine Gibson
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(lubridate) 
+bike = read_csv("bike_cleaned-2.csv")
+bike = bike%>% 
+  mutate(dteday =mdy(dteday)) %>%
+  mutate(mnth =as_factor(mnth)) %>%
+  mutate(season = as_factor(season)) %>%
+  mutate(holiday = as_factor(holiday)) %>%
+  mutate(weekday = as_factor(weekday)) %>%
+  mutate(workingday = as_factor(workingday)) %>%
+  mutate(weathersit = as_factor(weathersit)) %>%
+  mutate(hr = as_factor(hr))
+  
+```
+
+```{r}
+set.seed(1234)
+bike_split = initial_split(bike, prob = 0.80, strata = count)
+train = training(bike_split)
+test = testing(bike_split)
+
+```
+Test has 4343 rows and train has 13036 rows.
+
+```{r}
+biketrain_recipe = recipe(count ~ season + hr + mnth + holiday + weekday + workingday + weathersit + temp + atemp + hum + windspeed, train) %>%
+  step_dummy(all_nominal()) %>% 
+  step_center(all_predictors()) %>% 
+  step_scale(all_predictors()) 
+
+biketrain_model = 
+  linear_reg() %>%
+  set_engine("lm")
+
+biketrain_workflow =
+  workflow()%>%
+  add_model(biketrain_model)%>%
+  add_recipe(biketrain_recipe)
+
+biketrain_fit=fit(biketrain_workflow,bike)
+
+summary(biketrain_fit$fit$fit$fit)
+
+```
+The model contains a very low P value making it highly significant and an r squared of 0.632. 
+```{r}
+predict_train = biketrain_fit %>% predict(test) %>% bind_cols(test) %>% metrics(truth = count, estimate = .pred)
+
+predict_train
+```
+
+```{r}
+ggplot(predict_train, aes(x=.metric, y=.estimate)) +
+  geom_col()
+```
+
+The R-squared value applied to the testing set is 0.631, only 0.001 less than the training set. This shows that the model fits for both models.
+ 
+
+

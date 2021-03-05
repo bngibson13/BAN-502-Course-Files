@@ -1,0 +1,230 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Classification with Logistic Regression
+## Blaine Gibson
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(ROCR)
+library(e1071)
+parole <- read_csv("parole.csv")
+ 
+```
+
+```{r}
+parole <- parole %>%
+  mutate(male = as_factor(male)) %>%
+  mutate(race = as_factor(race)) %>%
+  mutate(state = as_factor(state)) %>%
+  mutate(crime = as_factor(crime)) %>%
+  mutate(multiple.offenses = as_factor(multiple.offenses)) %>%
+  mutate(violator = as_factor(violator)) %>%
+  mutate(male = fct_recode(male, "Female" = "0", "Male" = "1" )) %>%
+  mutate(race = fct_recode(race, "White" = "1", "Other" = "2" )) %>%
+  mutate(state = fct_recode(state, "Kentucky" = "2", "Louisiana" = "3","Virginia" = "4","Other" = "1")) %>%
+  mutate(crime = fct_recode(crime, "Larceny" = "2", "Drug-Related" = "3", "Driving-Related" = "4","Other" = "1")) %>%
+  mutate(multiple.offenses = fct_recode(multiple.offenses, "Multiple" = "1", "Single" = "0" )) %>%
+  mutate(violator = fct_recode(violator, "No Parole Violations" = "0", "Parole Violations" = "1" ))
+```
+
+```{r}
+str(parole)
+summary(parole)
+set.seed(12345)
+parole_split = initial_split(parole, prob =0.70, strata = violator)
+train=training(parole_split)
+test=testing(parole_split)
+```
+### Variable Comparison
+Sex(male)
+```{r}
+ggplot(train, aes(x=male, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+ggplot(train, aes(x=male, fill = violator)) + 
+  geom_bar(position = "fill") + 
+  theme_bw()
+t_male = table(train$violator, train$male) 
+prop.table(t_male, margin = 2 )
+```
+
+Race
+```{r}
+ggplot(train, aes(x=race, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+ggplot(train, aes(x=race, fill = violator)) + 
+  geom_bar(position = "fill") + 
+  theme_bw()
+t_race = table(train$violator, train$race) 
+prop.table(t_race, margin = 2 )
+```
+
+State
+```{r}
+ggplot(train, aes(x=state, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+ggplot(train, aes(x=state, fill = violator)) + 
+  geom_bar(position = "fill") + 
+  theme_bw()
+t_state = table(train$violator, train$state) 
+prop.table(t_state, margin = 2 )
+```
+
+Crime
+```{r}
+ggplot(train, aes(x=crime, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+ggplot(train, aes(x=crime, fill = violator)) + 
+  geom_bar(position = "fill") + 
+  theme_bw()
+t_crime = table(train$violator, train$crime) 
+prop.table(t_crime, margin = 2 )
+```
+
+Multiple Offenses
+```{r}
+ggplot(train, aes(x=multiple.offenses, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+ggplot(train, aes(x=multiple.offenses, fill = violator)) + 
+  geom_bar(position = "fill") + 
+  theme_bw()
+t_multiple.offenses = table(train$violator, train$multiple.offenses) 
+prop.table(t_multiple.offenses, margin = 2 )
+```
+After running each variable with visuals, the state of Louisiana was a high probability parole violation indicator. No other variables stood out with visuals.
+When analyzing the tabular data, multiple violations and gender showed as good indicators but not as evident as state.
+
+State appears to be the most predictive of violator.
+
+```{r}
+parole_model = 
+  logistic_reg() %>% 
+  set_engine("glm") 
+
+parole_recipe = recipe(violator ~ state, train) %>%
+  step_dummy(all_nominal(), -all_outcomes()) 
+
+logreg_wf = workflow() %>%
+  add_recipe(parole_recipe) %>% 
+  add_model(parole_model)
+
+parole_fit = fit(logreg_wf, train)
+```
+
+```{r}
+summary(parole_fit$fit$fit$fit)
+```
+This model has a fairly low AIC at 308.7 but I will see if adding one of the other variables could potentially improve this. The estimate shows that the probability of breaking parole is higher if in Louisiana but lower if in Virginia or other states not mentioned. The P value of each of those three indicators are well below 0.05. The model is fairly intuitive showing which variables are most expressive to the result.
+
+```{r}
+parole2_recipe = recipe(violator ~ state + multiple.offenses, train) %>%
+  step_dummy(all_nominal(), -all_outcomes()) 
+
+logreg2_wf = workflow() %>%
+  add_recipe(parole2_recipe) %>% 
+  add_model(parole_model)
+
+parole2_fit = fit(logreg2_wf, train)
+
+summary(parole2_fit$fit$fit$fit)
+```
+This model decreased the AIC but decreases the P value and estimate of Louisiana. Overall this improved the model but made it slightly less intuitive. Multiple offenders now has been the best will violate parole indicator while Virginia will be the best non-violation indicator.
+
+```{r}
+parole3_recipe = recipe(violator ~ state + race + multiple.offenses, train) %>%
+  step_dummy(all_nominal(), -all_outcomes()) 
+
+logreg3_wf = workflow() %>%
+  add_recipe(parole3_recipe) %>% 
+  add_model(parole_model)
+
+parole3_fit = fit(logreg3_wf, train)
+
+summary(parole3_fit$fit$fit$fit)
+```
+This model is better than the first but not as low as of AIC as the second model. Other states, Virginia, and multiple offenses are all significant due to their p values. Multiple offenses being the only strong indicator for likelihood of positive violation due to its positive estimate.
+
+### Predictions
+```{r}
+Parolee1 = data.frame(state = "Louisiana", race = "White", multiple.offenses = "Multiple")
+predict(parole3_fit, Parolee1, type="prob")
+
+Parolee2 = data.frame(state = "Kentucky", race = "Other", multiple.offenses = "Single")
+predict(parole3_fit, Parolee2, type="prob")
+```
+Parolee 1 has a high probability of parole violations with 44.2%, while parolee 2 has an lower probability of 15.2% of violation.
+```{r}
+
+```
+
+```{r}
+predictions = predict(parole3_fit, train, type="prob") 
+head(predictions)
+```
+```{r}
+predictions = predict(parole3_fit, train, type="prob") [2]
+head(predictions)
+```
+```{r}
+ROCRpredparole = prediction(predictions, train$violator) 
+
+ROCRperf = performance(ROCRpredparole, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+```
+```{r}
+as.numeric(performance(ROCRpredparole, "auc")@y.values)
+```
+
+```{r}
+opt.cut = function(perf, pred){
+    cut.ind = mapply(FUN=function(x, y, p){
+        d = (x - 0)^2 + (y-1)^2
+        ind = which(d == min(d))
+        c(sensitivity = y[[ind]], specificity = 1-x[[ind]], 
+            cutoff = p[[ind]])
+    }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+print(opt.cut(ROCRperf, ROCRpredparole))
+```
+The cutoff to produce both the highest sensitivity and specificity is 0.107.
+
+```{r}
+t1 = table(train$violator,predictions > 0.1070172)
+t1
+```
+#### Accuracy
+```{r}
+(t1[1,1]+t1[2,2])/nrow(train)
+```
+This yields 80.67% accuracy, a sensitivity of 0.7118 and a specificity of 0.7968. The implications of incorrectly classifying a parolee could result in further crimes being committed or the disappearance of a known criminal on the streets.
+```{r}
+t2 = table(train$violator,predictions > 0.547)
+t2
+(t2[1,1]+t2[2,2])/nrow(train)
+```
+
+The best probability threshold is 0.547 to be the most accurate.
+
+```{r}
+predictions2 = predict(parole3_fit, test, type="prob") [2]
+head(predictions2)
+
+ROCRpredparole2 = prediction(predictions2, test$violator) 
+
+ROCRperf = performance(ROCRpredparole2, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+t3 = table(test$violator,predictions2 > 0.547)
+t3
+
+(t3[1,1]+t3[2,2])/nrow(test)
+```
+The accuracy of the predictions increases by more than 3% with the test model.
